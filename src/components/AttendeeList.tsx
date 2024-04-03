@@ -11,33 +11,92 @@ import { Table } from "./table/Table";
 import { TableHeader } from "./table/TableHeader";
 import { TableCell } from "./table/TableCell";
 import { TableRow } from "./table/TableRow";
-import { attendes } from "../data/attendes";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/pt-br";
-import { useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 
 dayjs.extend(relativeTime);
 dayjs.locale("pt-br");
 
+interface Attendee {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  checkedAt: string | null;
+}
+
 export function AttendeeList() {
-  const [page, setPage] = useState(1);
-  const lastPage = Math.ceil(attendes.length / 10);
+  const [search, setSearch] = useState(() => {
+    const url = new URL(window.location.toString());
+    if (url.searchParams.has("search")) {
+      return url.searchParams.get("search") ?? "";
+    }
+    return "";
+  });
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => {
+    const url = new URL(window.location.toString());
+    if (url.searchParams.has("search")) {
+      return url.searchParams.get("search");
+    }
+    return 1;
+  });
+  const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const lastPage = Math.ceil(total / 10);
+
+  useEffect(() => {
+    const url = new URL(
+      "http://localhost:3333/events/9e9bd979-9d10-4915-b339-3786b1634f33/attendees"
+    );
+
+    url.searchParams.set("pageIndex", String(page - 1));
+
+    if (search.length > 0) {
+      url.searchParams.set("query", search);
+    }
+
+    fetch(url)
+      .then((response) => response.json())
+      .then((data) => {
+        setAttendees(data.attendees);
+        setTotal(data.total);
+      });
+  }, [page, search]);
+
+  function setCurrentPage(page: number) {
+    const url = new URL(window.location.toString());
+    url.searchParams.set("page", String(page));
+    window.history.pushState({}, "", url);
+    setPage(page);
+  }
+
+  function setCurrentSearch(search: string) {
+    const url = new URL(window.location.toString());
+    url.searchParams.set("search", search);
+    window.history.pushState({}, "", url);
+    setSearch(search);
+  }
+  function onSearchInputChanged(event: ChangeEvent<HTMLInputElement>) {
+    setCurrentSearch(event.target.value);
+    setCurrentPage(1);
+  }
 
   const goToNextPage = () => {
-    setPage((page) => page + 1);
+    setCurrentPage(page + 1);
   };
 
   const goToPreviousPage = () => {
-    setPage((page) => page - 1);
+    setCurrentPage(page - 1);
   };
 
   const goToLastPage = () => {
-    setPage(lastPage);
+    setCurrentPage(lastPage);
   };
 
   const goToFirstPage = () => {
-    setPage(1);
+    setCurrentPage(1);
   };
 
   return (
@@ -49,6 +108,8 @@ export function AttendeeList() {
           <input
             className="bg-transparent flex-1 outline-none text-sm border-0 p-0"
             placeholder="Buscando participantes ..."
+            value={search}
+            onChange={onSearchInputChanged}
           />
         </div>
       </div>
@@ -70,7 +131,7 @@ export function AttendeeList() {
           </tr>
         </thead>
         <tbody>
-          {attendes.slice((page - 1) * 10, page * 10).map((attendee) => {
+          {attendees.map((attendee) => {
             return (
               <TableRow
                 key={attendee.id}
@@ -91,8 +152,14 @@ export function AttendeeList() {
                     <span>{attendee.email}</span>
                   </div>
                 </TableCell>
-                <TableCell>{dayjs().to(attendee.createAt)}</TableCell>
-                <TableCell>{dayjs().to(attendee.checkedAt)}</TableCell>
+                <TableCell>{dayjs().to(attendee.createdAt)}</TableCell>
+                <TableCell>
+                  {attendee.checkedAt === null ? (
+                    <span className="color-zinc-500">Não fez check-in</span>
+                  ) : (
+                    dayjs().to(attendee.checkedAt)
+                  )}
+                </TableCell>
                 <TableCell>
                   <IconButton transparent>
                     <MoreHorizontal className="size-4" />
@@ -105,7 +172,7 @@ export function AttendeeList() {
         <tfoot>
           <tr>
             <TableCell colSpan={3}>
-              Mostrando 10 de {attendes.length} items
+              Mostrando {attendees.length} de {total} items
             </TableCell>
 
             <TableCell colSpan={3} className="text-right">
